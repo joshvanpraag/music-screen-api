@@ -1,8 +1,27 @@
 """Helper class to handle webhook callbacks from node-sonos-http-api and various REST commands."""
 import copy
-from distutils.util import strtobool
 
+import logging
+import functools
 from aiohttp import web
+
+def strtobool(val):
+    val = str(val).strip().lower()
+    if val in ("y", "yes", "t", "true", "on", "1"):
+        return 1
+    if val in ("n", "no", "f", "false", "off", "0"):
+        return 0
+    raise ValueError(f"invalid truth value {val!r}")
+
+def brief_error_log(handler_func):
+    @functools.wraps(handler_func)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await handler_func(*args, **kwargs)
+        except Exception as e:
+            logging.exception("Unhandled exception in webhook handler")
+            return web.Response(status=500, text="Internal Server Error")
+    return wrapper
 
 
 class SonosWebhook:
@@ -29,12 +48,14 @@ class SonosWebhook:
         site = web.TCPSite(self.runner, "0.0.0.0", 8080)
         await site.start()
 
+    @brief_error_log
     async def get_status(self, request):
         """Report the status of the application."""
         payload = copy.copy(vars(self.sonos_data))
         payload.pop("session")
         return web.json_response(payload)
 
+    @brief_error_log
     async def set_room(self, request):
         """Set the monitored room."""
         payload = await request.post()
@@ -42,6 +63,7 @@ class SonosWebhook:
         self.sonos_data.set_room(room)
         return web.Response(text="OK")
 
+    @brief_error_log
     async def show_detail(self, request):
         """Set the monitored room."""
         if not self.sonos_data.is_playing():
@@ -59,6 +81,7 @@ class SonosWebhook:
         self.display.show_album(detail, timeout)
         return web.Response(text="OK")
 
+    @brief_error_log
     async def handle_webhook(self, request):
         """Handle a webhook received from node-sonos-http-api."""
         json = await request.json()
