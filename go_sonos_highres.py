@@ -118,7 +118,8 @@ async def redraw(session, sonos_data, display):
         if new_track_info or force_update:
             _LOGGER.debug("The new_track_info state is %s and force_update state is %s, resetting display with new information", new_track_info, force_update)
 
-            if sonos_data.artist != "" and sonos_data.trackname !="":
+            is_dj_break = sonos_data.artist.startswith("@") or sonos_data.trackname.startswith("@") or sonos_data.trackname.startswith("#")
+            if sonos_data.artist != "" and sonos_data.trackname != "" and not is_dj_break:
                 if show_spotify_code or show_spotify_albumart:
                     spotify_client_id = getattr(sonos_settings, "spotify_client_id", None)
                     spotify_client_secret = getattr(sonos_settings, "spotify_client_secret", None)
