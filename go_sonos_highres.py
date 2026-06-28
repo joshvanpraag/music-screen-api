@@ -140,7 +140,7 @@ async def redraw(session, sonos_data, display):
                         spotify_code_path = "https://scannables.scdn.co/uri/plain/png/368A7D/white/320/"
 
                         try:
-                            search_trackname = re.sub(r’\s*\(\d{2}\)$’, ‘’, sonos_data.trackname)
+                            search_trackname = re.sub(r"\s*\(\d{2}\)$", "", sonos_data.trackname)
                             results = spotify.search(q="artist:" + re.sub("´|`|’|’", "", sonos_data.artist) + " track:" + re.sub("´|`|’|’", "", search_trackname), type="track", limit=1, market=sonos_settings.spotify_market)
 
                             if results['tracks']['total'] != 0:
