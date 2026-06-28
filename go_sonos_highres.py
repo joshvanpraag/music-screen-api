@@ -141,7 +141,8 @@ async def redraw(session, sonos_data, display):
 
                         try:
                             search_trackname = re.sub(r"\s*\(\d{2}\)$", "", sonos_data.trackname)
-                            results = spotify.search(q="artist:" + re.sub("´|`|’|’", "", sonos_data.artist) + " track:" + re.sub("´|`|’|’", "", search_trackname), type="track", limit=1, market=sonos_settings.spotify_market)
+                            search_artist = re.sub("´|`|’|’", "", sonos_data.artist).replace("&", "and")
+                            results = spotify.search(q="artist:" + search_artist + " track:" + re.sub("´|`|’|’", "", search_trackname), type="track", limit=1, market=sonos_settings.spotify_market)
 
                             if results['tracks']['total'] != 0:
                                 results = results['tracks']['items'][0]  # Find top result
