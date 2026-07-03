@@ -148,14 +148,22 @@ async def redraw(session, sonos_data, display):
 
                             if results['tracks']['total'] != 0:
                                 results = results['tracks']['items'][0]  # Find top result
-                                uri = results['uri']
-                                spotify_albumart_uri = results['album']['images'][0]['url']
-                                _LOGGER.debug("Spotify album art URI successfully obtained: %s", spotify_albumart_uri)
-                                if sonos_data.uri.startswith('x-sonos-spotify:'):
-                                    spotify_code_uri = sonos_data.uri.replace('x-sonos-spotify:', '')
-                                else:                            
-                                    spotify_code_uri = uri
-                                _LOGGER.debug("Spotify Code URI successfully obtained: %s", spotify_code_uri)
+                                result_artist = results['artists'][0]['name'].lower()
+                                search_words = set(w for w in re.split(r'\W+', search_artist.lower()) if len(w) > 2)
+                                result_words = set(w for w in re.split(r'\W+', result_artist) if len(w) > 2)
+                                if search_words and result_words and not search_words & result_words:
+                                    _LOGGER.warning("Spotify artist mismatch: searched '%s', got '%s' — skipping", search_artist, results['artists'][0]['name'])
+                                    spotify_code_uri = None
+                                    spotify_albumart_uri = None
+                                else:
+                                    uri = results['uri']
+                                    spotify_albumart_uri = results['album']['images'][0]['url']
+                                    _LOGGER.debug("Spotify album art URI successfully obtained: %s", spotify_albumart_uri)
+                                    if sonos_data.uri.startswith('x-sonos-spotify:'):
+                                        spotify_code_uri = sonos_data.uri.replace('x-sonos-spotify:', '')
+                                    else:
+                                        spotify_code_uri = uri
+                                    _LOGGER.debug("Spotify Code URI successfully obtained: %s", spotify_code_uri)
                             else:
                                 spotify_code_uri = None
                                 spotify_albumart_uri = None
