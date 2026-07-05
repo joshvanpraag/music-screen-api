@@ -143,6 +143,7 @@ async def redraw(session, sonos_data, display):
 
                         try:
                             search_trackname = re.sub(r"\s*\(\d{2}\)$", "", sonos_data.trackname)
+                            search_trackname = search_trackname.split(" / ")[0]
                             search_artist = re.sub("´|`|’|’", "", sonos_data.artist)
                             results = spotify.search(q=search_artist + " " + re.sub("´|`|’|’", "", search_trackname), type="track", limit=1, market=sonos_settings.spotify_market)
 
