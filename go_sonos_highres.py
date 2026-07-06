@@ -149,27 +149,30 @@ async def redraw(session, sonos_data, display):
                             search_trackname = re.sub(r"\s*\(\d{2}\)$", "", sonos_data.trackname)
                             search_trackname = search_trackname.split(" / ")[0]
                             search_artist = re.sub("´|`|’|’", "", sonos_data.artist)
-                            results = spotify.search(q=search_artist + " " + re.sub("´|`|’|’", "", search_trackname), type="track", limit=1, market=sonos_settings.spotify_market)
+                            results = spotify.search(q=search_artist + " " + re.sub("´|`|’|’", "", search_trackname), type="track", limit=5, market=sonos_settings.spotify_market)
+                            candidates = results['tracks']['items']
 
-                            if results['tracks']['total'] != 0:
-                                results = results['tracks']['items'][0]  # Find top result
-                                result_artist = results['artists'][0]['name'].lower()
-                                search_words = set(w for w in re.split(r'\W+', search_artist.lower()) if len(w) > 2 and w not in ARTIST_MATCH_STOPWORDS)
-                                result_words = set(w for w in re.split(r'\W+', result_artist) if len(w) > 2 and w not in ARTIST_MATCH_STOPWORDS)
+                            search_words = set(w for w in re.split(r'\W+', search_artist.lower()) if len(w) > 2 and w not in ARTIST_MATCH_STOPWORDS)
+                            match = None
+                            for candidate in candidates:
+                                result_words = set(w for w in re.split(r'\W+', candidate['artists'][0]['name'].lower()) if len(w) > 2 and w not in ARTIST_MATCH_STOPWORDS)
                                 if search_words and result_words and not search_words & result_words:
-                                    _LOGGER.warning("Spotify artist mismatch: searched '%s', got '%s' — skipping", search_artist, results['artists'][0]['name'])
-                                    spotify_code_uri = None
-                                    spotify_albumart_uri = None
+                                    continue
+                                match = candidate
+                                break
+
+                            if match:
+                                uri = match['uri']
+                                spotify_albumart_uri = match['album']['images'][0]['url']
+                                _LOGGER.debug("Spotify album art URI successfully obtained: %s", spotify_albumart_uri)
+                                if sonos_data.uri.startswith('x-sonos-spotify:'):
+                                    spotify_code_uri = sonos_data.uri.replace('x-sonos-spotify:', '')
                                 else:
-                                    uri = results['uri']
-                                    spotify_albumart_uri = results['album']['images'][0]['url']
-                                    _LOGGER.debug("Spotify album art URI successfully obtained: %s", spotify_albumart_uri)
-                                    if sonos_data.uri.startswith('x-sonos-spotify:'):
-                                        spotify_code_uri = sonos_data.uri.replace('x-sonos-spotify:', '')
-                                    else:
-                                        spotify_code_uri = uri
-                                    _LOGGER.debug("Spotify Code URI successfully obtained: %s", spotify_code_uri)
+                                    spotify_code_uri = uri
+                                _LOGGER.debug("Spotify Code URI successfully obtained: %s", spotify_code_uri)
                             else:
+                                if candidates:
+                                    _LOGGER.warning("Spotify artist mismatch: searched '%s', none of top %d results matched (got %s) — skipping", search_artist, len(candidates), ", ".join(c['artists'][0]['name'] for c in candidates))
                                 spotify_code_uri = None
                                 spotify_albumart_uri = None
                         except:
