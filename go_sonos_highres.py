@@ -45,6 +45,10 @@ if show_spotify_code or show_spotify_albumart:
 POLLING_INTERVAL = 1
 WEBHOOK_INTERVAL = 60
 
+# Common words that shouldn't count as a meaningful artist-name match on their own
+# (e.g. "The Beatles" vs. a tribute band called "All The Yong Dudes" both contain "the")
+ARTIST_MATCH_STOPWORDS = {"the", "and", "feat", "featuring", "ft"}
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 ###############################################################################
@@ -151,8 +155,8 @@ async def redraw(session, sonos_data, display):
                             if results['tracks']['total'] != 0:
                                 results = results['tracks']['items'][0]  # Find top result
                                 result_artist = results['artists'][0]['name'].lower()
-                                search_words = set(w for w in re.split(r'\W+', search_artist.lower()) if len(w) > 2)
-                                result_words = set(w for w in re.split(r'\W+', result_artist) if len(w) > 2)
+                                search_words = set(w for w in re.split(r'\W+', search_artist.lower()) if len(w) > 2 and w not in ARTIST_MATCH_STOPWORDS)
+                                result_words = set(w for w in re.split(r'\W+', result_artist) if len(w) > 2 and w not in ARTIST_MATCH_STOPWORDS)
                                 if search_words and result_words and not search_words & result_words:
                                     _LOGGER.warning("Spotify artist mismatch: searched '%s', got '%s' — skipping", search_artist, results['artists'][0]['name'])
                                     spotify_code_uri = None
