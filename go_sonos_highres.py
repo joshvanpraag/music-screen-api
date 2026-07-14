@@ -51,8 +51,34 @@ ARTIST_MATCH_STOPWORDS = {"the", "and", "feat", "featuring", "ft"}
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+_spotify_client = None
+_spotify_auth_success = False
+
 ###############################################################################
 # Functions
+
+def get_spotify_client():
+    """Return a cached Spotify client, authorising once and reusing it on
+    subsequent calls instead of fetching a fresh OAuth token per track."""
+    global _spotify_client, _spotify_auth_success
+    if _spotify_client is not None:
+        return _spotify_client, True
+
+    spotify_client_id = getattr(sonos_settings, "spotify_client_id", None)
+    spotify_client_secret = getattr(sonos_settings, "spotify_client_secret", None)
+    if not (spotify_client_id and spotify_client_secret):
+        return None, False
+
+    try:
+        client_credentials_manager = SpotifyClientCredentials(spotify_client_id, spotify_client_secret)
+        _spotify_client = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
+        _spotify_auth_success = True
+        _LOGGER.debug("Authorising Spotify developer account successful")
+    except Exception:
+        _spotify_auth_success = False
+        _LOGGER.warning("Problem authorising Spotify developer account, please check your credentials in sonos_settings.py are correct")
+
+    return _spotify_client, _spotify_auth_success
 
 async def get_image_data(session, url):
     """Return image data from a URL if available."""
@@ -129,18 +155,7 @@ async def redraw(session, sonos_data, display):
                 if show_spotify_code or show_spotify_albumart:
                     spotify_client_id = getattr(sonos_settings, "spotify_client_id", None)
                     spotify_client_secret = getattr(sonos_settings, "spotify_client_secret", None)
-
-                    if spotify_client_id and spotify_client_secret:
-                        client_credentials_manager = SpotifyClientCredentials(spotify_client_id, spotify_client_secret)
-                        try:
-                            spotify_auth_success = True
-                            spotify = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
-                            _LOGGER.debug("Authorising Spotify developer account successful")
-                        except:
-                            spotify_auth_success = False
-                            _LOGGER.warning("Problem authorising Spotify developer account, please check your credentials in sonos_settings.py are correct")
-                    else:
-                        spotify_auth_success = False
+                    spotify, spotify_auth_success = get_spotify_client()
 
                 if spotify_client_id and spotify_client_secret:
                     if show_spotify_code or show_spotify_albumart and spotify_auth_success:
