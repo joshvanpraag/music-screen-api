@@ -12,7 +12,7 @@ import sys
 import time
 from io import BytesIO
 
-from aiohttp import ClientError, ClientSession
+from aiohttp import ClientError, ClientSession, ClientTimeout
 from PIL import Image, ImageFile
 
 import async_demaster
@@ -134,7 +134,7 @@ async def redraw(session, sonos_data, display):
                         client_credentials_manager = SpotifyClientCredentials(spotify_client_id, spotify_client_secret)
                         try:
                             spotify_auth_success = True
-                            spotify = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
+                            spotify = spotipy.Spotify(client_credentials_manager=client_credentials_manager, requests_timeout=10)
                             _LOGGER.debug("Authorising Spotify developer account successful")
                         except:
                             spotify_auth_success = False
@@ -316,7 +316,7 @@ async def main(loop):
         sonos_room = sonos_settings.room_name_for_highres
         _LOGGER.info("Monitoring room: %s", sonos_room)
 
-    session = ClientSession()
+    session = ClientSession(timeout=ClientTimeout(total=15))
     sonos_data = SonosData(
         sonos_settings.sonos_http_api_address,
         sonos_settings.sonos_http_api_port,
