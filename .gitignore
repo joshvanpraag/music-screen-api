@@ -8,3 +8,5 @@ sonos_settings.py
 .idea/vcs.xml
 .idea/*
 /.venv/*
+# Spotify token cache (spotipy)
+.cache

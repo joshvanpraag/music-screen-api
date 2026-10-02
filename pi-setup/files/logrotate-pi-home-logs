@@ -1,0 +1,12 @@
+# Installed to /etc/logrotate.d/pi-home-logs by pi-setup/setup.sh.
+# Caps every ~/*.log at 5 MB, keeps 3 compressed copies. Runs daily.
+/home/pi/*.log {
+    su pi pi
+    size 5M
+    rotate 3
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
