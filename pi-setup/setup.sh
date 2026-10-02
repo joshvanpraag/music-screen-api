@@ -6,10 +6,14 @@
 #   bash ~/music-screen-api/pi-setup/setup.sh                 # display only
 #   bash ~/music-screen-api/pi-setup/setup.sh --with-skylight # display + skylight dashboard
 #
-# Spotify keys: pass SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET as env vars, or it will ask.
+# Never prompts, so it can run over SSH. Secrets come from ~/sonos-display-backup/
+# (copied over by the rebuild runbook), or SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET env vars.
+#
+# Exit codes: 0 done, 2 secrets missing, 3 skylight needs a GitHub deploy key (see README).
 # See pi-setup/README.md for the why behind each step.
 
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
 
 ROOM="Kitchen"
 HOME_DIR="/home/pi"
@@ -18,6 +22,7 @@ FILES="$SETUP_DIR/files"
 SONOS_API_DIR="$HOME_DIR/node-sonos-http-api"
 DISPLAY_DIR="$HOME_DIR/music-screen-api"
 SKYLIGHT_DIR="$HOME_DIR/skylight"
+BACKUP_DIR="$HOME_DIR/sonos-display-backup"
 PM2=/usr/local/bin/pm2
 WITH_SKYLIGHT=false
 [[ "${1:-}" == "--with-skylight" ]] && WITH_SKYLIGHT=true
@@ -61,10 +66,14 @@ cat "$SONOS_API_DIR/settings.json"
 step "Writing music-screen-api/sonos_settings.py"
 if [[ -f "$DISPLAY_DIR/sonos_settings.py" ]]; then
   echo "Already exists, leaving it alone."
+elif [[ -f "$BACKUP_DIR/music-screen-api/sonos_settings.py" ]]; then
+  cp "$BACKUP_DIR/music-screen-api/sonos_settings.py" "$DISPLAY_DIR/sonos_settings.py"
+  echo "Restored from $BACKUP_DIR."
 else
-  : "${SPOTIFY_CLIENT_ID:=}" "${SPOTIFY_CLIENT_SECRET:=}"
-  [[ -n "$SPOTIFY_CLIENT_ID" ]] || read -rp "Spotify client ID: " SPOTIFY_CLIENT_ID
-  [[ -n "$SPOTIFY_CLIENT_SECRET" ]] || read -rp "Spotify client secret: " SPOTIFY_CLIENT_SECRET
+  if [[ -z "${SPOTIFY_CLIENT_ID:-}" || -z "${SPOTIFY_CLIENT_SECRET:-}" ]]; then
+    echo "!! No sonos_settings.py, no backup in $BACKUP_DIR, and no SPOTIFY_CLIENT_ID/SECRET env vars."
+    exit 2
+  fi
   sed -e "s|__SPOTIFY_CLIENT_ID__|$SPOTIFY_CLIENT_ID|" \
       -e "s|__SPOTIFY_CLIENT_SECRET__|$SPOTIFY_CLIENT_SECRET|" \
       "$FILES/sonos_settings.py.template" > "$DISPLAY_DIR/sonos_settings.py"
@@ -98,20 +107,23 @@ if $WITH_SKYLIGHT; then
     if ! GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
          git clone git@github.com:joshvanpraag/vanpraagskylight.git "$SKYLIGHT_DIR"; then
       echo
-      echo "!! GitHub refused the clone. Add this key as a deploy key (read-only is fine) at"
-      echo "!! https://github.com/joshvanpraag/vanpraagskylight/settings/keys, then re-run this script:"
+      echo "!! GitHub refused the clone. Add this key as a read-only deploy key on"
+      echo "!! joshvanpraag/vanpraagskylight (README: 'skylight deploy key'), then re-run:"
       echo
       cat "$HOME_DIR/.ssh/id_ed25519.pub"
-      exit 1
+      exit 3
     fi
   fi
   (cd "$SKYLIGHT_DIR" && npm install --no-audit --no-fund)
+  for f in immich-settings.json prompts.json; do
+    if [[ ! -f "$SKYLIGHT_DIR/$f" && -f "$BACKUP_DIR/skylight/$f" ]]; then
+      cp "$BACKUP_DIR/skylight/$f" "$SKYLIGHT_DIR/$f" && echo "Restored $f from $BACKUP_DIR."
+    fi
+    [[ -f "$SKYLIGHT_DIR/$f" ]] || echo "!! $SKYLIGHT_DIR/$f is missing (gitignored, not in backup)."
+  done
   install -m 755 "$FILES/skylight-deploy.sh" "$HOME_DIR/skylight-deploy.sh"
   "$PM2" describe skylight >/dev/null 2>&1 || \
     "$PM2" start "$SKYLIGHT_DIR/server.js" --name skylight --cwd "$SKYLIGHT_DIR"
-  for f in immich-settings.json prompts.json; do
-    [[ -f "$SKYLIGHT_DIR/$f" ]] || echo "!! $SKYLIGHT_DIR/$f is missing (gitignored). Restore it from your backup."
-  done
 fi
 
 step "Starting pm2 on boot"

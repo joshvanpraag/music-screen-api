@@ -9,67 +9,108 @@ This folder rebuilds the kitchen album-art display from a blank SD card. It exis
 - `music-screen-api` (this repo) draws the album art full-screen.
 - Optional: the `skylight` dashboard (private repo) on port 3000.
 
-## Rebuild in 4 steps
+## If the Pi dies: your part
 
-**1. Flash the SD card** with [Raspberry Pi Imager](https://www.raspberrypi.com/software/):
-- Device: Raspberry Pi 3. OS: **Raspberry Pi OS (32-bit), Bookworm, with desktop**. If Imager now
-  lists Bookworm under "Raspberry Pi OS (other)" or "Legacy", pick it from there; newer releases are untested.
-- Edit settings (the gear / "Customise" step):
+This takes about 10 minutes. After that, Claude Code does everything else.
+
+**1. Flash a new SD card** with [Raspberry Pi Imager](https://www.raspberrypi.com/software/):
+- Device: **Raspberry Pi 3**.
+- OS: **Raspberry Pi OS (32-bit), Bookworm, with desktop**. If Imager lists Bookworm under
+  "Raspberry Pi OS (other)" or "Legacy", pick it from there. Newer releases are untested.
+- In the customisation settings:
   - Hostname: `sonos-display`
-  - Username: `pi`, plus a password you'll remember
+  - Username: `pi`, with any password
   - Wi-Fi: the same network as the Kitchen speaker
-  - Services tab: **enable SSH** with password authentication
+  - Services: enable SSH, choose **"Allow public-key authentication only"**, and paste this key:
+    ```
+    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGf0I3mDBYzGB6F5yOCqoNbg+Tc4N/fn9ADkEbMHAPwO claude-code@Goblin -> sonos-display
+    ```
+    This key is what lets Claude log in without your password. The same key is in `files/authorized_keys`.
 
-**2. Boot the Pi and SSH in** from your PC: `ssh pi@sonos-display.local`.
-The screen stays black until step 4. That's expected.
-If you get a "host key changed" warning, run `ssh-keygen -R sonos-display.local` and try again.
+**2. Put the card in the Pi and power it on.** Wait about 3 minutes for its first boot.
+The screen stays black until the end. That's expected.
 
-**3. Run the setup script:**
+**3. Tell Claude Code:**
+> The Sonos display Pi was replaced and is online. Rebuild it using the runbook in
+> music-screen-api/pi-setup/README.md.
+
+## Rebuild runbook (for Claude Code)
+
+Run every step from Josh's Windows PC in Git Bash. **Don't ask Josh for anything.**
+Each step is automatic, and the only exceptions are listed in the step itself.
+
+This PC already has what the runbook needs:
+- the SSH key `~/.ssh/id_ed25519_sonos` and a `Host sonos-display` entry in `~/.ssh/config`
+- the secrets backup in `~/sonos-display-backup/`
+- `gh`, logged in as joshvanpraag with `repo` scope
+
+**1. Connect.** The new Pi has a new host key, so clear the old one first:
 ```bash
-git clone https://github.com/joshvanpraag/music-screen-api ~/music-screen-api
-bash ~/music-screen-api/pi-setup/setup.sh --with-skylight   # leave off --with-skylight to skip the dashboard
+ssh-keygen -R sonos-display.local
+ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes sonos-display 'hostname; grep PRETTY /etc/os-release'
 ```
-It asks for the Spotify client ID and secret. They're in `~/sonos-display-backup/` on your PC
-(see [Backups](#backups)), or you can create new ones at https://developer.spotify.com/dashboard.
-To restore the skylight settings, see [Restoring from backup](#restoring-from-backup) before running it.
+- If this fails with `Permission denied (publickey)`, the key wasn't pasted in Imager. Ask Josh to
+  re-flash with the key (step 1 above). That's the only fix that needs no password.
+- If the host isn't found, wait 2 more minutes, then check that Josh used hostname `sonos-display`.
 
-**4. Reboot** with `sudo reboot`. After about a minute the album art should appear. To check:
+**2. Copy the secrets backup to the Pi:**
 ```bash
-curl -s localhost:5005/zones | grep -o '"roomName":"[^"]*"' | sort -u
+scp -r ~/sonos-display-backup sonos-display:~/
 ```
-You should see Kitchen, Mia's Room, Office and Parent's Room, and **not** Sonos Roam SL.
 
-The script is safe to re-run. If something fails partway, fix it and run it again.
+**3. Clone and run setup.** This takes 10–20 minutes on a Pi 3, so run it detached and poll:
+```bash
+ssh sonos-display 'git clone https://github.com/joshvanpraag/music-screen-api ~/music-screen-api 2>/dev/null || git -C ~/music-screen-api pull --ff-only
+  nohup bash -c "bash ~/music-screen-api/pi-setup/setup.sh --with-skylight; echo SETUP_EXIT=\$?" > ~/setup.log 2>&1 &'
+ssh sonos-display 'tail -5 ~/setup.log'     # repeat every few minutes until SETUP_EXIT= appears
+```
+
+**4. Handle the exit code:**
+- `SETUP_EXIT=0`: go to step 5.
+- `SETUP_EXIT=3`: skylight is a private repo and the new Pi's key isn't on GitHub yet. Add it, then re-run step 3:
+  ```bash
+  ssh sonos-display 'cat ~/.ssh/id_ed25519.pub' > /tmp/sonos-pi.pub
+  gh repo deploy-key add /tmp/sonos-pi.pub -R joshvanpraag/vanpraagskylight -t "sonos-display $(date +%F)"
+  ```
+  Afterwards, `gh repo deploy-key list -R joshvanpraag/vanpraagskylight` shows the keys. Delete any
+  older `sonos-display` key with `gh repo deploy-key delete <id> -R ...`, since it belonged to the dead Pi.
+- `SETUP_EXIT=2`: the secrets backup is missing. This is the only case where you need Josh: ask
+  for the Spotify client ID and secret, then re-run with
+  `SPOTIFY_CLIENT_ID=... SPOTIFY_CLIENT_SECRET=... bash ~/music-screen-api/pi-setup/setup.sh --with-skylight`.
+- Anything else: read `~/setup.log`, fix the cause, and re-run step 3. The script is safe to re-run.
+
+**5. Reboot**, then wait about 2 minutes:
+```bash
+ssh sonos-display 'sudo reboot'
+```
+
+**6. Verify.** All of these must pass:
+```bash
+ssh sonos-display '
+  curl -s localhost:5005/zones | grep -o "\"roomName\":\"[^\"]*\"" | sort -u   # 4 S1 rooms, NOT Sonos Roam SL
+  pm2 ls                                                                     # sonos-http-api, skylight, pm2-logrotate online
+  curl -s -o /dev/null -w "skylight %{http_code}\n" localhost:3000            # 200
+  pgrep -af go_sonos_highres                                                 # display app running
+  tail -5 ~/music-screen-api.log; tail -5 ~/autostart.log                    # "New track" if music is playing, no tracebacks
+  crontab -l'
+```
+Then tell Josh it's done, mention anything that failed, and ask him to glance at the screen.
 
 ## Backups
 
-Three files can't go in git because they hold keys:
+Three files can't go in git because they hold keys. The rebuild restores them from
+`~/sonos-display-backup/` on Josh's PC:
 
-| File | Holds |
+| File on the Pi | Holds |
 |---|---|
 | `~/music-screen-api/sonos_settings.py` | Spotify client ID and secret |
 | `~/skylight/immich-settings.json` | skylight's Immich settings |
 | `~/skylight/prompts.json` | skylight's prompts |
 
-From your PC (Git Bash), in this repo, run:
+**Re-run the backup after changing any of them.** From the PC, in this repo:
 ```bash
 bash pi-setup/backup-from-pi.sh
 ```
-It copies them into `~/sonos-display-backup/`. Re-run it whenever you change one of them.
-
-### Restoring from backup
-Between steps 2 and 3, copy the backup to the Pi from your PC:
-```bash
-scp -r ~/sonos-display-backup pi@sonos-display.local:/tmp/backup
-```
-Then on the Pi, use these in place of step 3:
-```bash
-git clone https://github.com/joshvanpraag/music-screen-api ~/music-screen-api
-cp /tmp/backup/music-screen-api/sonos_settings.py ~/music-screen-api/
-bash ~/music-screen-api/pi-setup/setup.sh --with-skylight
-cp /tmp/backup/skylight/*.json ~/skylight/ && pm2 restart skylight
-```
-The script won't ask for Spotify keys when `sonos_settings.py` is already there.
 
 ## What the script sets up, and why
 
