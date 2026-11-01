@@ -168,8 +168,43 @@ API pushes a webhook, because Sonos sends no event for it. Code: `lib/helpers/si
 - The default can also be set in `node-sonos-http-api/settings.json`:
   `"siriusNowPlaying": { "mode": "auto", "pollSeconds": 15, "maxSongMinutes": 10 }`.
 
+### When SiriusXM songs stop showing
+
+Start with `curl -s http://sonos-display.local:5005/sxmnowplaying`. It lists the active
+sources (`providers`), the source that answered last (`source`), and each failure (`errors`).
+API logs: `pm2 logs sonos-http-api` (lines start with `SiriusXM`).
+
+- **`providers` is only `["xmplaylist"]`:** the login file is missing or unreadable. The log says which.
+- **`siriusxm: SiriusXM rejected the username or password`:** Josh changed his SiriusXM password.
+  He updates `C:\Users\joshv\sonos-display-backup\node-sonos-http-api\siriusxm-login.json` on
+  his PC. Then copy it over and restart:
+  ```bash
+  scp ~/sonos-display-backup/node-sonos-http-api/siriusxm-login.json sonos-display:node-sonos-http-api/
+  ssh sonos-display 'chmod 600 ~/node-sonos-http-api/siriusxm-login.json; rm -f ~/node-sonos-http-api/cache/siriusxm-session.json; pm2 restart sonos-http-api'
+  ```
+  Deleting `cache/siriusxm-session.json` forces a fresh login. Do the same if SiriusXM
+  keeps failing with 401/403.
+- **`siriusxm: ... returned 4xx/5xx` from a step other than the password, or a parse error:**
+  SiriusXM changed its web-player API. Our login flow copies
+  [onesastr/omarchy-siriusxm](https://github.com/onesastr/omarchy-siriusxm) (the `SxmApi` class
+  in its `sxm` script), so check that project for a newer version and port the change.
+- **`xmplaylist: ...` errors or a stale song:** xmplaylist.com is down or changed its format.
+  The SiriusXM fallback covers this as long as the login works. Its API is `GET /api/station`
+  (channel list, where `id` is the same UUID as in the Sonos URI) and `GET /api/station/<deeplink>`.
+- **No errors, song never appears:** check the Sonos URI still contains `channel-linear:<uuid>`
+  and `sid=37`: `curl -s localhost:5005/Kitchen/state` on the Pi. `channelIdOf()` relies on both.
+
 ## Known limitations
 
 - The HyperPixel backlight can't be turned off on Bookworm (GPIO error), so the screen stays on.
-- SiriusXM DJ announcements show the channel logo, because Spotify has no matching art.
+- SiriusXM DJ talk and ads show the channel logo, because there's no song to show.
 - The desktop flashes briefly on boot before the display starts.
+- **Harmless log noise, don't chase it:**
+  - `~/music-screen-api.log` shows `Connection failed ... localhost:5005` at about :00 and :30.
+    That's the half-hourly pm2 restart.
+  - `pm2 logs sonos-http-api` shows `Could not reach webhook ... ECONNREFUSED ::1:8080` on
+    every change. Node resolves `localhost` to IPv6, but the display listens only on IPv4, so
+    the webhook has never reached it. The display polls `/state` every second instead and
+    works fine. Changing the webhook to `http://127.0.0.1:8080/` would fix it, but would also
+    switch the display to webhook mode (a poll only every 60s). Josh decided on 2026-11-01 to
+    leave it as is.
