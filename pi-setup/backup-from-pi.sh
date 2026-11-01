@@ -14,6 +14,7 @@ mkdir -p "$DEST"
 
 for f in \
   music-screen-api/sonos_settings.py \
+  node-sonos-http-api/siriusxm-login.json \
   skylight/immich-settings.json \
   skylight/prompts.json; do
   mkdir -p "$DEST/$(dirname "$f")"

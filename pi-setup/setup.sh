@@ -63,6 +63,12 @@ cat > "$SONOS_API_DIR/settings.json" <<EOF
 EOF
 cat "$SONOS_API_DIR/settings.json"
 
+# Optional: SiriusXM login, used when xmplaylist.com can't supply the song (see README).
+if [[ ! -f "$SONOS_API_DIR/siriusxm-login.json" && -f "$BACKUP_DIR/node-sonos-http-api/siriusxm-login.json" ]]; then
+  install -m 600 "$BACKUP_DIR/node-sonos-http-api/siriusxm-login.json" "$SONOS_API_DIR/siriusxm-login.json"
+  echo "Restored siriusxm-login.json from $BACKUP_DIR."
+fi
+
 step "Writing music-screen-api/sonos_settings.py"
 if [[ -f "$DISPLAY_DIR/sonos_settings.py" ]]; then
   echo "Already exists, leaving it alone."

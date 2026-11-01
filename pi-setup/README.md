@@ -98,12 +98,13 @@ Then tell Josh it's done, mention anything that failed, and ask him to glance at
 
 ## Backups
 
-Three files can't go in git because they hold keys. The rebuild restores them from
+Four files can't go in git because they hold keys. The rebuild restores them from
 `~/sonos-display-backup/` on Josh's PC:
 
 | File on the Pi | Holds |
 |---|---|
 | `~/music-screen-api/sonos_settings.py` | Spotify client ID and secret |
+| `~/node-sonos-http-api/siriusxm-login.json` | SiriusXM username and password (optional, see "SiriusXM song data") |
 | `~/skylight/immich-settings.json` | skylight's Immich settings |
 | `~/skylight/prompts.json` | skylight's prompts |
 
@@ -149,7 +150,13 @@ name and a stream URI. Our `node-sonos-http-api` fork looks the song up on
 webhook, so the display and skylight show the song without any changes of their own. When the song changes, the
 API pushes a webhook, because Sonos sends no event for it. Code: `lib/helpers/sirius-now-playing.js`.
 
-- Song older than 10 minutes (DJ talk, ads): the channel name and logo show, as before.
+- **Fallback:** if xmplaylist fails, doesn't track the channel, or its latest song is over
+  10 minutes old, the API asks SiriusXM itself, logging in with
+  `~/node-sonos-http-api/siriusxm-login.json` (`{"username": "...", "password": "..."}`, mode 600,
+  gitignored, in the backup). Without that file only xmplaylist is used. SiriusXM's data includes
+  song lengths and flags DJ talk and ads, so those breaks are detected exactly.
+- No current song from either source (DJ talk, ads): the channel name and logo show, as before.
+- The `errors` field of `/sxmnowplaying` shows why a source failed, e.g. a rejected login.
 - **Switching back:** the default mode `auto` only looks songs up when Sonos has none. If
   SiriusXM fixes this, Sonos data takes over by itself. To force a mode (it persists across restarts):
   ```bash
