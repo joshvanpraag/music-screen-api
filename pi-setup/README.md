@@ -141,6 +141,26 @@ Only install Node from apt (`nodejs npm`, Node 18). NodeSource doesn't support t
    Sonos factory reset), re-run `setup.sh`, which rewrites `settings.json` with the new ID.
 4. Display logs: `~/music-screen-api.log`. API logs: `pm2 logs sonos-http-api`.
 
+## SiriusXM song data
+
+Since late 2026, SiriusXM no longer sends song data to Sonos. Sonos only reports the channel
+name and a stream URI. Our `node-sonos-http-api` fork looks the song up on
+[xmplaylist.com](https://xmplaylist.com) by channel ID and fills it into `/state` and the
+webhook, so the display and skylight show the song without any changes of their own. When the song changes, the
+API pushes a webhook, because Sonos sends no event for it. Code: `lib/helpers/sirius-now-playing.js`.
+
+- Song older than 10 minutes (DJ talk, ads): the channel name and logo show, as before.
+- **Switching back:** the default mode `auto` only looks songs up when Sonos has none. If
+  SiriusXM fixes this, Sonos data takes over by itself. To force a mode (it persists across restarts):
+  ```bash
+  curl http://sonos-display.local:5005/sxmnowplaying        # mode + what each channel is playing
+  curl http://sonos-display.local:5005/sxmnowplaying/off    # never look up (pure Sonos data)
+  curl http://sonos-display.local:5005/sxmnowplaying/on     # always look up, even if Sonos has a song
+  curl http://sonos-display.local:5005/sxmnowplaying/auto   # default
+  ```
+- The default can also be set in `node-sonos-http-api/settings.json`:
+  `"siriusNowPlaying": { "mode": "auto", "pollSeconds": 15, "maxSongMinutes": 10 }`.
+
 ## Known limitations
 
 - The HyperPixel backlight can't be turned off on Bookworm (GPIO error), so the screen stays on.
