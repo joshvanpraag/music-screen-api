@@ -126,6 +126,7 @@ Each of these fixes a problem we actually hit. If you set the Pi up by hand, don
 | pm2 restart every 30 min (cron) | Speakers can drop out of discovery after long idle periods; a restart finds them again. It must use the full path `/usr/local/bin/pm2`: cron can't find plain `pm2`, and for months the restart silently never ran. |
 | Log caps (`pm2-logrotate` and `/etc/logrotate.d/pi-home-logs`) | While Kitchen was missing, the API logged an error on every poll, and one log reached 1.6 GB. Every log is now capped at 5 MB × 3 copies. |
 | Wi-Fi power-save off | With power-save on, the Pi 3 A+ Wi-Fi drops off the network until it's power-cycled. |
+| `/etc/cron.d/announce-ip` (every minute, needs `iputils-arping`) | On 2026-11-16 the Pi was healthy (internet, router, Sonos all fine) but no other device could reach it until a power cycle. Suspected cause: the Deco mesh or other devices losing track of the Pi's address. This broadcasts it every minute. Not yet proven to work; if it happens again, see "When nothing can reach the Pi" in skylight's CLAUDE.md. |
 | Persistent journal | Keeps system logs across reboots so crashes can be diagnosed. |
 | Disabled cups, bluetooth, ModemManager, colord, PipeWire | The Pi has only 425 MB of RAM. None of these are used: audio plays through the Sonos speakers, not the Pi. |
 | SSH key from `files/authorized_keys` | Lets Claude Code on Josh's PC (`~/.ssh/id_ed25519_sonos`) SSH in without a password. |

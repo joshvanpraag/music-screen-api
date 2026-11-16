@@ -1,0 +1,7 @@
+# Installed to /etc/cron.d/announce-ip by music-screen-api/pi-setup/setup.sh.
+# Every minute, broadcast "192.168.68.61 is this Pi" (a gratuitous ARP) on Wi-Fi.
+# Why: on 2026-11-16 the Pi was healthy (internet, router and Sonos all fine) but
+# no other device could reach it until it was power-cycled. The suspected cause
+# is the Deco mesh or other devices losing track of the Pi's address. This keeps
+# them current. Harmless; delete this file to undo. Needs iputils-arping.
+* * * * * root /usr/bin/arping -U -c 1 -I wlan0 192.168.68.61 >/dev/null 2>&1

@@ -140,6 +140,7 @@ step "Installing cron jobs"
 install -m 755 "$FILES/pi-health-check.sh" "$HOME_DIR/pi-health-check.sh"
 {
   echo "# Managed by music-screen-api/pi-setup/setup.sh. Use the full pm2 path: cron's PATH lacks /usr/local/bin."
+  # Why each setting exists: README.md, "What the script sets up, and why". Check there before removing any.
   echo "*/30 * * * * $PM2 restart sonos-http-api > /dev/null 2>&1"
   echo "*/5 * * * * $HOME_DIR/pi-health-check.sh"
   if $WITH_SKYLIGHT; then echo "*/2 * * * * $HOME_DIR/skylight-deploy.sh"; fi
@@ -152,6 +153,9 @@ sudo install -m 644 "$FILES/logrotate-pi-home-logs" /etc/logrotate.d/pi-home-log
 step "Pi stability fixes"
 # Wi-Fi power-save makes the Pi 3 A+ drop off the network until power-cycled.
 sudo install -m 644 "$FILES/wifi-powersave-off.conf" /etc/NetworkManager/conf.d/wifi-powersave-off.conf
+# Announce the Pi's address every minute, so other devices don't lose track of it (Nov 16 outage).
+sudo apt-get install -y -q iputils-arping
+sudo install -m 644 "$FILES/cron-announce-ip" /etc/cron.d/announce-ip
 # Keep logs across reboots so crashes can be diagnosed.
 sudo sed -i 's/^#\?Storage=.*/Storage=persistent/' /etc/systemd/journald.conf
 # Free RAM (only 425 MB): nothing here prints, pairs Bluetooth, or plays audio locally.
